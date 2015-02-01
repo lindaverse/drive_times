@@ -1,4 +1,6 @@
 import os, sqlite3
+from drive_times.drive_time_client import DrivingInfo
+
 try:
     from thread import get_ident
 except ImportError:
@@ -11,14 +13,17 @@ class DriveTimeCache:
             '('
             '  target_postcode TEXT,'
             '  postcode TEXT,'
+            '  duration_secs INTEGER,'
             '  duration TEXT,'
+            '  distance_metres INTEGER,'
+            '  distance TEXT,'
             '  PRIMARY KEY (target_postcode, postcode)'
             ')'
     )
 
-    _get = 'SELECT duration FROM postcode_duration_cache WHERE target_postcode = ? AND postcode = ?'
+    _get = 'SELECT target_postcode, postcode, duration_secs, duration, distance_metres, distance FROM postcode_duration_cache WHERE target_postcode = ? AND postcode = ?'
 
-    _set = 'INSERT OR REPLACE INTO postcode_duration_cache (target_postcode, postcode, duration) VALUES (?, ?, ?)'
+    _set = 'INSERT OR REPLACE INTO postcode_duration_cache (target_postcode, postcode, duration_secs, duration, distance_metres, distance) VALUES (?, ?, ?, ?, ?, ?)'
 
     def __init__(self, cache_file="postcode_cache.db", cache_directory="../data"):
         self.cache_path = os.path.join(cache_directory, cache_file)
@@ -36,13 +41,13 @@ class DriveTimeCache:
     def get(self, target_postcode, postcode):
         with self._get_conn() as conn:
             cursor = conn.execute(self._get, (target_postcode, postcode))
-            result = cursor.fetchone()
-            if result:
-                return result[0]
+            row = cursor.fetchone()
+            if row:
+                return DrivingInfo(*row, status='CACHED')
             else:
                 return None
 
-    def set(self, target_postcode, postcode, duration):
+    def set(self, drivetime_info):
         with self._get_conn() as conn:
-            conn.execute(self._set, (target_postcode, postcode, duration))
+            conn.execute(self._set, drivetime_info[:6])
 

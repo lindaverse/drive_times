@@ -22,7 +22,7 @@ def main(args):
     postcodes = []
     with open(args.input_file, 'r') as input_postcodes:
         for line in input_postcodes.readlines():
-            postcode = line.strip().replace(',', '').replace(" ", "")
+            postcode = line.strip().replace(',', '').replace(" ", "").upper()
             if postcode:
                 postcodes.append(postcode)
 
@@ -32,7 +32,7 @@ def main(args):
 
     with open(args.output_file, 'w') as output:
         writer = csv.writer(output, delimiter=',', quoting=csv.QUOTE_MINIMAL)
-        writer.writerows(results.items())
+        writer.writerows(results.values())
 
 
 
@@ -41,13 +41,16 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Reads a file of postcodes and gives durations to a fixed postcode.')
 
+    def uppercase_postcode(s):
+        #TODO: maybe validate it's a valid postcode?
+        return str(s).strip().replace(' ', '').upper()
     parser.add_argument(
         '-t',
         '--target',
         metavar='POSTCODE',
-        type=str,
+        type=uppercase_postcode,
         help='The target postcode',
-        required=True
+        required=True,
     )
 
     parser.add_argument(
@@ -85,7 +88,6 @@ if __name__ == '__main__':
         help='The filename of the postcode cache.',
         default='postcode_cache.db'
     )
-
 
     args = parser.parse_args()
     main(args)

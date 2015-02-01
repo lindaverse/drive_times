@@ -1,12 +1,14 @@
 from behave import *
 from faker import Factory
 import mock
-from drive_times.drive_time_client import DriveTimeClient
+
 from mock import Mock, call
+with mock.patch("time.sleep"):
+    from drive_times.drive_time_client import DriveTimeClient, DrivingInfo, empty_drive_info
 
 def random_postcode(number_of_postcodes):
     fake = Factory.create('en_GB')
-    return [fake.postcode() for n in range(number_of_postcodes)]
+    return [fake.postcode().upper().replace(' ', '') for n in range(number_of_postcodes)]
 
 def fake_google_response(num_postcodes, invalid=False):
     mock_response = Mock()
@@ -21,7 +23,12 @@ def fake_google_response_row(invalid=False):
         'elements': [
             {
                 'duration': {
-                    'text': '500 miles'
+                    'text': '500 minutes',
+                    'value': 1234
+                },
+                'distance': {
+                    'text': '500 miles',
+                    'value': 4321
                 },
                 'status': 'OK' if not invalid else 'NOT_FOUND'
             }
@@ -33,7 +40,7 @@ def fake_google_response_row(invalid=False):
 @mock.patch('requests.get', return_value=fake_google_response(5))
 def step_impl(context, mock_requests):
     context.mock_requests = mock_requests
-    context.target_postcode = "EH7 5EZ"
+    context.target_postcode = "EH75EZ"
     context.postcodes = random_postcode(10)
     context.drive_time_cache = Mock()
     context.drive_time_cache.get.return_value = None
@@ -41,8 +48,10 @@ def step_impl(context, mock_requests):
 
 
 @When('we get drive times')
-def step_impl(context):
-    context.return_value = context.client.get_drive_times(context.target_postcode, context.postcodes)
+@mock.patch('time.sleep')
+def step_impl(context, patched_sleep):
+    with patched_sleep:
+        context.return_value = context.client.get_drive_times(context.target_postcode, context.postcodes)
 
 
 @Then('we only call Google twice')
@@ -53,7 +62,7 @@ def step_impl(context):
 @Then('we cache the results')
 def step_impl(context):
     for postcode in context.postcodes:
-        context.drive_time_cache.set.assert_any_call(context.target_postcode, postcode, '500 miles')
+        context.drive_time_cache.set.assert_any_call(DrivingInfo(context.target_postcode, postcode, 1234, "500 minutes", 4321, '500 miles', 'OK'))
 
 @Given('an invalid postcode')
 @mock.patch('requests.get', return_value=fake_google_response(1, invalid=True))
@@ -65,9 +74,9 @@ def step_impl(context, mock_requests):
     context.drive_time_cache.get.return_value = None
     context.client = DriveTimeClient(batch_size=5, drive_time_cache=context.drive_time_cache, get=context.mock_requests)
 
-@Then('the driving duration for the invalid postcode is None')
+@Then('the driving duration for the invalid postcode is NOT_FOUND')
 def step_impl(context):
-    assert context.return_value[context.postcodes[0]] == None
+    assert context.return_value[context.postcodes[0]] == empty_drive_info(context.target_postcode, context.postcodes[0], "NOT_FOUND")
 
 @Given('10 cached postcodes and a batch size of 5')
 @mock.patch('requests.get')
@@ -117,7 +126,8 @@ def step_impl(context):
 @Then('we cache the missing results')
 def step_impl(context):
     for postcode in context.expected_postcodes:
-        context.drive_time_cache.set.assert_any_call(context.target_postcode, postcode, '500 miles')
+        context.drive_time_cache.set.assert_any_call(DrivingInfo(context.target_postcode, postcode, 1234, "500 minutes", 4321, '500 miles', 'OK'))
+
 
 
 @Given('the Google API requests limit has been exceeded')
@@ -126,9 +136,9 @@ def step_impl(context):
     mock_response.json.return_value = {'status': 'OVER_QUERY_LIMIT'}
     context.mock_requests.return_value = mock_response
 
-@Then("return None and don't cache")
+@Then("return NOT_FETCHED and don't cache")
 def setp_impl(context):
     assert context.drive_time_cache.set.call_count == 0
     for postcode in context.postcodes:
-        assert context.return_value[postcode] == None
+        assert context.return_value[postcode] == empty_drive_info(context.target_postcode, postcode, "NOT_FETCHED")
 
