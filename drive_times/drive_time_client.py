@@ -74,9 +74,12 @@ class DriveTimeClient:
                         )
                         results[postcode] = drive_info
                         self.cache.set(drive_info)
-                    elif status == 'NOT_FOUND':
+                    elif status in ['NOT_FOUND', 'ZERO_RESULTS']:
                         results[postcode] = empty_drive_info(target_postcode, postcode, status)
                         self.cache.set(empty_drive_info(target_postcode, postcode, status))
+                    else:
+                        results[postcode] = empty_drive_info(target_postcode, postcode, status)
+
 
                 break
             elif response_status == "OVER_QUERY_LIMIT":
@@ -93,7 +96,8 @@ class DriveTimeClient:
                 sleep(sleep_time)
                 continue
             else:
-                break
+                for postcode in postcodes:
+                    results[postcode] = empty_drive_info(target_postcode, postcode, response_status)
         return results
 
     def _batch(self, postcodes):
